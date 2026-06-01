@@ -1,0 +1,30 @@
+name: PromptOps Regression Check
+
+on:
+  pull_request:
+    paths:
+      - ".promptops/**"
+      - "prompts/**"
+      - "**/*.prompt"
+
+jobs:
+  prompt-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install promptops
+        run: pip install promptops
+
+      - name: Run prompt regression eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: promptops eval --compare origin/main..HEAD --fail-on-regression

@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use promptops in academic work, please cite it."
+title: "promptops: Git-native version control for LLM prompts"
+version: 0.1.0
+date-released: 2026-05-31
+license: MIT
+url: "https://github.com/vineetha00/promptops"
+authors:
+  - family-names: Joy
+    given-names: Vineetha
+    affiliation: University of Southern California
+    email: vineetha@usc.edu
+keywords:
+  - large language models
+  - prompt engineering
+  - version control
+  - model context protocol
+  - thompson sampling
+  - llm as judge
+preferred-citation:
+  type: software
+  title: "promptops: Git-native version control for LLM prompts"
+  version: 0.1.0
+  year: 2026
+  authors:
+    - family-names: Joy
+      given-names: Vineetha
