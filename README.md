@@ -12,7 +12,7 @@
 pip install promptops
 ```
 
-<!-- DEMO GIF -->
+![promptops demo — init, commit, semantic diff, Thompson Sampling A/B test, rollback](docs/demo.gif)
 
 ---
 
