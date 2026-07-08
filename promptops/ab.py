@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
+    import numpy as _np  # type: ignore
     from scipy.stats import beta as _beta_dist  # type: ignore
 except Exception:  # pragma: no cover
+    _np = None
     _beta_dist = None
 
 from . import store
@@ -102,6 +104,9 @@ def simulate(name: str, candidate_tags: list[str], n: int, true_rates: dict[str,
     """
     if seed is not None:
         random.seed(seed)
+        if _np is not None:
+            # scipy's beta.rvs draws from numpy's global RNG, not `random`
+            _np.random.seed(seed)
     for _ in range(n):
         tag = route(name, candidate_tags, start)
         rate = true_rates.get(tag, 0.5)
