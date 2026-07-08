@@ -6,7 +6,7 @@ long_description = (here / "README.md").read_text() if (here / "README.md").exis
 
 setup(
     name="promptops",
-    version="0.1.0",
+    version="0.1.1",
     description="Git-native version control for LLM prompts: semantic diff, Thompson Sampling A/B, LLM-as-judge eval, MCP server.",
     long_description=long_description,
     long_description_content_type="text/markdown",
