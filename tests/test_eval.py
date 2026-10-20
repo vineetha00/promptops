@@ -111,6 +111,21 @@ def test_cli_exits_2_when_eval_cannot_run(repo, monkeypatch):
     assert "eval failed" in result.output
 
 
+def test_cli_report_has_per_case_outputs(repo, monkeypatch, tmp_path):
+    store.commit("payment-agent", "worse prompt", tag="v2", start=repo)
+    _pr_commit(repo)
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(ev, "_anthropic_client", lambda: FakeClient())
+    out = tmp_path / "report.json"
+    result = CliRunner().invoke(cli.main, ["eval", "--compare", "main..HEAD",
+                                           "--fail-on-regression", "--report", str(out)])
+    assert result.exit_code == 1, result.output
+    data = json.loads(out.read_text())
+    case = data["cases"]["payment-agent@v2"]["b"]
+    assert case["output"] == "worse prompt|refund?" and case["total"] == 1.0
+    assert data["models"]["judge"] == [ev.JUDGE_MODEL]
+
+
 # --- defect 2: trusted baseline -------------------------------------------------
 
 def test_regression_detected_against_main(repo):

@@ -150,6 +150,7 @@ class Score:
     safety: float
     rationale: str = ""
     n_cases: int = 1
+    output: str = ""  # the judged response; set on per-case scores only
 
     @property
     def total(self) -> float:
@@ -198,6 +199,10 @@ class EvalReport:
             "regressions": [
                 {"from": a, "to": b, "drop_pct": d} for a, b, d in self.regressions
             ],
+            "cases": {
+                key: {cid: {**s.to_dict(), "output": s.output} for cid, s in per_case.items()}
+                for key, per_case in self.cases.items()
+            },
             "stats": self.stats,
             "notes": self.notes,
             "models": self.models,
@@ -364,7 +369,11 @@ class Evaluator:
         """Return (mean score, per-case scores) for one prompt version."""
         if not cases:
             raise EvalSetError("eval set is empty")
-        per_case = {c.id: self.judge(c, self.generate(prompt_text, c)) for c in cases}
+        per_case = {}
+        for c in cases:
+            output = self.generate(prompt_text, c)
+            per_case[c.id] = self.judge(c, output)
+            per_case[c.id].output = output
         return Score.mean(list(per_case.values())), per_case
 
 

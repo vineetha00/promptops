@@ -191,8 +191,11 @@ def cmd_status() -> None:
               help="Exit code 1 if quality drops >10%.")
 @click.option("--threshold", type=float, default=0.10,
               help="Regression threshold as a fraction (default 0.10).")
+@click.option("--report", "report_path", type=click.Path(dir_okay=False), default=None,
+              help="Write the full report (per-case outputs, scores, rationales) as JSON.")
 def cmd_eval(compare_spec: str | None, prompt_name: str | None,
-             fail_on_regression: bool, threshold: float) -> None:
+             fail_on_regression: bool, threshold: float,
+             report_path: str | None) -> None:
     """Run each version over its eval set and judge the outputs.
 
     Exit codes: 0 pass, 1 regression (with --fail-on-regression),
@@ -211,6 +214,8 @@ def cmd_eval(compare_spec: str | None, prompt_name: str | None,
         console.print(f"[red]eval failed, no result produced:[/red] {escape(str(e))}")
         sys.exit(2)
 
+    if report_path:
+        Path(report_path).write_text(json.dumps(report.to_dict(), indent=2))
     for note in report.notes:
         console.print(f"[dim]note:[/dim] {escape(note)}")
     if not report.versions:
