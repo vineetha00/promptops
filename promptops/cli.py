@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__, ab, diff as diff_mod, eval as eval_mod, rollback as rb_mod, store
@@ -192,18 +193,33 @@ def cmd_status() -> None:
               help="Regression threshold as a fraction (default 0.10).")
 def cmd_eval(compare_spec: str | None, prompt_name: str | None,
              fail_on_regression: bool, threshold: float) -> None:
-    """Run LLM-as-judge eval and optionally fail on regression."""
-    if prompt_name:
-        report = eval_mod.evaluate_prompt(prompt_name)
-    else:
-        base_ref, head_ref = "main", "HEAD"
-        if compare_spec and ".." in compare_spec:
-            base_ref, head_ref = compare_spec.split("..", 1)
-        report = eval_mod.compare_branches(base_ref, head_ref,
-                                           regression_threshold=threshold)
+    """Run each version over its eval set and judge the outputs.
+
+    Exit codes: 0 pass, 1 regression (with --fail-on-regression),
+    2 the eval could not run (always a failure, never a pass).
+    """
+    try:
+        if prompt_name:
+            report = eval_mod.evaluate_prompt(prompt_name)
+        else:
+            base_ref, head_ref = "main", "HEAD"
+            if compare_spec and ".." in compare_spec:
+                base_ref, head_ref = compare_spec.split("..", 1)
+            report = eval_mod.compare_branches(base_ref, head_ref,
+                                               regression_threshold=threshold)
+    except (eval_mod.EvalError, KeyError) as e:
+        console.print(f"[red]eval failed, no result produced:[/red] {escape(str(e))}")
+        sys.exit(2)
+
+    for note in report.notes:
+        console.print(f"[dim]note:[/dim] {escape(note)}")
+    if not report.versions:
+        console.print("[green]no prompt changes to evaluate[/green]")
+        return
 
     table = Table(title="eval scores")
     table.add_column("version", style="cyan")
+    table.add_column("cases", justify="right")
     table.add_column("quality", justify="right")
     table.add_column("relevance", justify="right")
     table.add_column("safety", justify="right")
@@ -211,17 +227,35 @@ def cmd_eval(compare_spec: str | None, prompt_name: str | None,
     for tag, score in report.versions.items():
         table.add_row(
             tag,
+            str(score.n_cases),
             f"{score.quality:.2f}",
             f"{score.relevance:.2f}",
             f"{score.safety:.2f}",
             f"{score.total:.2f}",
         )
     console.print(table)
+    if report.models:
+        models = "  ".join(f"{role}={','.join(m)}" for role, m in report.models.items() if m)
+        u = report.usage
+        console.print(
+            f"[dim]served by: {models}  |  {u.get('calls', 0)} calls, "
+            f"{u.get('input_tokens', 0)} in / {u.get('output_tokens', 0)} out tokens[/dim]"
+        )
 
     if report.regressions:
         console.print("[red]regressions detected:[/red]")
         for a, b, drop in report.regressions:
-            console.print(f"  {a} → {b}: -{drop*100:.1f}%")
+            p = report.stats.get(b, {}).get("p")
+            p_str = f" (p={p:.3f})" if p is not None else ""
+            console.print(f"  {a} → {b}: -{drop*100:.1f}%{p_str}")
+            base_cases, cand_cases = report.cases.get(a, {}), report.cases.get(b, {})
+            deltas = {c: cand_cases[c].total - base_cases[c].total
+                      for c in cand_cases if c in base_cases}
+            for cid in sorted(deltas, key=deltas.get)[:3]:  # worst three cases
+                console.print(
+                    f"    case {cid}: {base_cases[cid].total:.2f} → "
+                    f"{cand_cases[cid].total:.2f}  [dim]{escape(cand_cases[cid].rationale)}[/dim]"
+                )
         if fail_on_regression:
             sys.exit(1)
     else:

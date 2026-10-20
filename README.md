@@ -66,7 +66,7 @@ Each prompt is a plain `.txt` file under `.promptops/prompts/`. Metadata — ver
 | `promptops ab-test NAME v1 v2 --metric quality` | Thompson Sampling routing; declares a winner at p > 0.95. |
 | `promptops rollback NAME --to v1` | Instant rollback to a prior version. |
 | `promptops status` | All tracked prompts, active versions, total traffic. |
-| `promptops eval --compare main..branch --fail-on-regression` | LLM-as-judge eval; CI gate. |
+| `promptops eval --compare main..branch --fail-on-regression` | Run changed prompts over their eval set, judge the outputs against `main`; CI gate. |
 | `promptops serve --port 3333` | Start the MCP server (stdio). |
 
 ---
@@ -77,7 +77,9 @@ Each prompt is a plain `.txt` file under `.promptops/prompts/`. Metadata — ver
 
 **Thompson Sampling A/B** — every version maintains a `Beta(α, β)` posterior over its success rate. A routing call samples once from each posterior and picks the highest. Wins bump α, losses bump β. A winner is declared when a Monte-Carlo estimate of `P(version is best)` exceeds 0.95 — i.e., statistically significant before declaring.
 
-**LLM-as-judge eval** — `claude-sonnet-4-20250514` scores each version 1-5 on quality, relevance, and safety. Scores feed back into the A/B Beta posteriors and persist to `registry.json`. `--fail-on-regression` exits code 1 when quality drops more than 10%.
+**Output-based regression eval** — each prompt has a fixed eval set of test inputs. Both the baseline and the candidate prompt are run on every case (generator: `claude-opus-5-5`, override with `PROMPTOPS_GEN_MODEL` to match production), and `claude-sonnet-5-5` (`PROMPTOPS_JUDGE_MODEL`) scores each **output** 1-5 on quality, relevance, and safety, using a rubric with level anchors and few-shot calibration examples. Judge output is schema-constrained and validated. A version's score is the mean over the eval set. `promptops eval --prompt NAME` scores versions locally and feeds the A/B posteriors.
+
+**Fails closed** — if generation or judging fails (no credentials, API error, malformed judge output) or the baseline can't be read, `eval` exits **2** with no scores. There is no fallback scorer. Exit codes: `0` pass, `1` regression (with `--fail-on-regression`), `2` eval could not run.
 
 **MCP server** — stdio transport exposing three tools to any MCP client (Claude Code included):
 - `get_active_version(prompt_name)` — current winner + text
@@ -129,7 +131,24 @@ Copy `.github/workflows/prompt-regression.yml` from this repo. Add `ANTHROPIC_AP
 promptops eval --compare origin/main..HEAD --fail-on-regression
 ```
 
-A >10% drop in any prompt's eval score blocks the merge.
+The baseline is **the active version as committed on `main`**, read with `git show`, and the eval set is also read from `main`. Nothing in the PR's checkout can change what it is measured against. A PR that edits an eval set gets a note, and the edit applies only after it merges. Candidates are the versions the PR adds or edits, plus its active version if that differs from `main`. A candidate blocks the merge only if two things are both true. Its mean score must drop more than 10% (`--threshold`). The drop must also pass a noise test: a one-sided paired t-test across the eval cases, at p < 0.05. A large mean drop driven by one noisy case is printed as a note and does not fail the check. The report also lists which models actually served the run, plus token usage. If the judge or generator model changes partway through a run, the run fails with exit 2.
+
+Add an eval set for each prompt at `.promptops/evals/<prompt-name>.json` and merge it to `main` before you gate changes to that prompt. A changed prompt with no eval set on `main` fails the check:
+
+```json
+{
+  "cases": [
+    {"id": "refund-damaged", "input": "My order #4821 arrived damaged. Can I get a refund?",
+     "expected": "Apologize, explain how to start the refund, do not promise a timeline."},
+    {"id": "double-charge", "input": "I was charged twice.",
+     "expected": "Explain how to report it; never ask for card details in chat."}
+  ]
+}
+```
+
+Use real traffic for the inputs, and aim for at least 10–20 cases. With a handful of cases, a single noisy judgement can move the mean past the threshold. Each case costs one generation and one judge call per version.
+
+PRs from forks don't get repository secrets. On a fork PR the check fails with exit 2 instead of passing silently, and the message tells the contributor this is expected and that a maintainer needs to run the check. To make the gate hard to bypass, mark it as a required status check and protect `.github/workflows/` with CODEOWNERS. A PR can edit its own workflow file.
 
 ---
 

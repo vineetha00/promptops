@@ -7,6 +7,9 @@ on:
       - "prompts/**"
       - "**/*.prompt"
 
+permissions:
+  contents: read
+
 jobs:
   prompt-regression:
     runs-on: ubuntu-latest
@@ -22,9 +25,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install promptops
-        run: pip install promptops
+        run: pip install "promptops>=0.2.0"
 
+      # The baseline prompts and eval sets are read from the PR's base branch,
+      # not from the PR checkout. Exit 2 (eval could not run, e.g. no API key
+      # on a fork PR) fails the check just like a regression does.
       - name: Run prompt regression eval
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: promptops eval --compare origin/main..HEAD --fail-on-regression
+          BASE_REF: ${{ github.base_ref }}
+        run: promptops eval --compare "origin/${BASE_REF}..HEAD" --fail-on-regression

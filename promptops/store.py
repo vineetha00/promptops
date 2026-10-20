@@ -6,6 +6,8 @@ Layout on disk:
         prompts/
             {name}/
                 {timestamp}_{tag}.txt
+        evals/
+            {name}.json        # fixed eval set, see eval.py
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from typing import Any
 
 PROMPTOPS_DIR = ".promptops"
 PROMPTS_DIR = "prompts"
+EVALS_DIR = "evals"
 REGISTRY_FILE = "registry.json"
 
 
@@ -42,6 +45,11 @@ def registry_path(start: Path | None = None) -> Path:
 
 def prompts_path(start: Path | None = None) -> Path:
     return promptops_path(start) / PROMPTS_DIR
+
+
+def eval_set_relpath(name: str) -> str:
+    """Eval-set path relative to the repo root (the same at every git ref)."""
+    return f"{PROMPTOPS_DIR}/{EVALS_DIR}/{safe_name(name)}.json"
 
 
 @dataclass
@@ -68,6 +76,11 @@ class Version:
             beta=d.get("beta", 1.0),
             traffic=d.get("traffic", 0),
         )
+
+
+def safe_name(name: str) -> str:
+    """Filesystem-safe form of a prompt name (used for prompt and eval-set paths)."""
+    return name.replace("/", "_").replace(" ", "_")
 
 
 def is_initialized(start: Path | None = None) -> bool:
@@ -118,8 +131,7 @@ def commit(name: str, text: str, tag: str | None = None, start: Path | None = No
     if tag in existing_tags:
         raise ValueError(f"Tag {tag!r} already exists for prompt {name!r}")
 
-    safe_name = name.replace("/", "_").replace(" ", "_")
-    pdir = prompts_path(start) / safe_name
+    pdir = prompts_path(start) / safe_name(name)
     pdir.mkdir(parents=True, exist_ok=True)
     fname = f"{int(ts)}_{tag}.txt"
     fpath = pdir / fname

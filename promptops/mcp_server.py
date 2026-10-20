@@ -164,7 +164,7 @@ def _run_fallback_stdio() -> None:
                 _send({"jsonrpc": "2.0", "id": msg_id, "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "promptops", "version": "0.1.1"},
+                    "serverInfo": {"name": "promptops", "version": "0.2.0"},
                 }})
             elif method == "tools/list":
                 _send({"jsonrpc": "2.0", "id": msg_id, "result": {
