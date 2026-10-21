@@ -51,6 +51,13 @@ SIGNIFICANCE = 0.05
 # 3. floor: one case scores below FLOOR while the baseline scored at or above it.
 # Both per-case triggers are confirmed by judging the same outputs again, so a
 # single flaky judgement cannot fail the gate.
+#
+# Calibration (6 repeat runs of an unchanged prompt over 6 cases): per-case
+# noise between reruns peaked at 1.33 points (>= 1.0 in 2 of 90 run pairs,
+# never >= 2.0); judging the same output twice differed by at most 0.33. Real
+# regressions dropped single cases by 2.0-2.67. The unchanged prompt never
+# scored a case below 3.0. Scores move in steps of 1/3, so 2.0 sits two steps
+# above the worst noise observed.
 COLLAPSE_DROP = 2.0
 FLOOR = 2.0
 # Below this many cases the mean test has little power; the report says so.
