@@ -164,7 +164,7 @@ Add an eval set for each prompt at `.promptops/evals/<prompt-name>.json` and mer
 }
 ```
 
-Use real traffic for the inputs, and aim for at least 10–20 cases. Below 10, the mean test has little power and the report warns you. Each case costs one generation and one judge call per version. Measured with the default models, that's about $0.005–0.009 per case per version, so a 20-case eval set costs roughly **$0.20–0.35 per PR**.
+Use real traffic for the inputs, and aim for at least 10–20 cases. Below 10, the mean test has little power and the report warns you. The case count matters most for failures that happen only some of the time. The gate only sees failures that occur during the run. In testing, a bad prompt made the model refuse about 1 request in 4, and a 6-case run sometimes saw no refusals at all. At that rate, a 6-case eval set misses the failure about 18% of the time, and a 20-case set about 0.3% of the time. Each case costs one generation and one judge call per version. Measured with the default models, that's about $0.005–0.009 per case per version, so a 20-case eval set costs roughly **$0.20–0.35 per PR**.
 
 PRs from forks don't get repository secrets. On a fork PR the check fails with exit 2 instead of passing silently, and the message tells the contributor this is expected and that a maintainer needs to run the check. To make the gate hard to bypass, mark it as a required status check and protect `.github/workflows/` with CODEOWNERS. A PR can edit its own workflow file.
 
