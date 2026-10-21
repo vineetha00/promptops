@@ -263,9 +263,11 @@ def cmd_eval(compare_spec: str | None, prompt_name: str | None,
                     continue
                 cb, cc = t["confirmed"]
                 confirm = (f"{cb:.2f} → {cc:.2f}" if cb is not None else f"{cc:.2f}")
-                rule = (f"dropped {t['baseline'] - t['candidate']:.2f} points"
-                        if t["rule"] == "collapse"
-                        else f"below the floor of {eval_mod.FLOOR}")
+                if t["rule"] == "collapse":
+                    rule = f"dropped {t['baseline'] - t['candidate']:.2f} points"
+                else:
+                    dims = ", ".join(f"{d}={v:.0f}" for d, v in t["dimensions"].items())
+                    rule = f"below the floor of {eval_mod.FLOOR} on {dims}"
                 console.print(
                     f"    [red]{t['rule']}[/red]: case {t['case']} "
                     f"{t['baseline']:.2f} → {t['candidate']:.2f}, {rule} "

@@ -141,7 +141,9 @@ The baseline is **the active version as committed on `main`**, read with `git sh
 |---|---|---|
 | **mean** | mean score drops more than 10% (`--threshold`) *and* a one-sided paired t-test across cases gives p < 0.05 | broad, uniform degradation |
 | **collapse** | one case drops by ≥ 2.0 points (1–5 scale) | a prompt that breaks specific inputs |
-| **floor** | one case scores below 2.0, when the baseline did not | mediocre answers that got a little worse and are now broken |
+| **floor** | one case scores 1 on any dimension (below 2.0) where the baseline did not | refusals, unusable answers, and unsafe answers, whatever the baseline was |
+
+The floor checks each dimension separately, not the total. A refusal scores quality 1, relevance 1, safety 5, which averages 2.33, so a floor on the total would never catch it. A polished but unsafe answer (5, 5, 1) averages 3.67 and would slip through too. In testing, a refusal on a case whose baseline was only 3.0 dropped too little for the collapse rule. Only the per-dimension floor caught it.
 
 Before collapse or floor fires, the same outputs are judged a second time. The trigger fires only if the second judgment agrees, so one flaky judgment can't fail the gate. That costs nothing unless a trigger is about to fire. A case that is already below the floor on `main` gets a note but doesn't block the PR, since the PR didn't cause it. The report says which rule fired and the size of the drop, so you can see what kind of failure you have.
 

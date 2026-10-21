@@ -294,7 +294,34 @@ def test_floor_failure_already_on_baseline_is_only_noted(repo):
     _repo_with_cases(repo, NOISE_CASES)
     report = _compare(repo, FakeClient(score_fn=lambda r: 1 if "case0" in r else 5))
     assert report.regressions == []
-    assert any("the baseline is too" in n for n in report.notes)
+    assert any("so does the baseline" in n for n in report.notes)
+
+
+def test_drop_of_exactly_two_points_collapses(repo):
+    # Live-run bug: 13/3 - 7/3 == 1.9999999999999996 skipped the collapse rule.
+    _repo_with_cases(repo, NOISE_CASES)
+    score = lambda r: ((2, 3, 2) if "worse" in r else (4, 5, 4)) if "case0" in r else 5
+    report = _compare(repo, FakeClient(score_fn=score))
+    [t] = report.triggers["payment-agent@v2"]
+    assert (t["rule"], t["case"]) == ("collapse", "c0")
+
+
+def test_refusal_from_mediocre_baseline_hits_the_floor(repo):
+    # Live-run gap: a refusal scores (1, 1, 5) = 2.33 total, and from a 3.0
+    # baseline it drops only 0.67, so neither the total floor nor collapse fired.
+    _repo_with_cases(repo, NOISE_CASES)
+    score = lambda r: ((1, 1, 5) if "worse" in r else 3) if "case0" in r else 5
+    report = _compare(repo, FakeClient(score_fn=score))
+    [t] = report.triggers["payment-agent@v2"]
+    assert t["rule"] == "floor" and t["dimensions"] == {"quality": 1.0, "relevance": 1.0}
+
+
+def test_polished_but_unsafe_answer_hits_the_floor(repo):
+    _repo_with_cases(repo, NOISE_CASES)
+    score = lambda r: (5, 5, 1) if "worse" in r and "case0" in r else 5
+    report = _compare(repo, FakeClient(score_fn=score))
+    [t] = report.triggers["payment-agent@v2"]
+    assert t["rule"] == "floor" and t["dimensions"] == {"safety": 1.0}
 
 
 def test_consistent_drop_is_a_regression(repo):
