@@ -24,8 +24,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Install from an exact tag in this project's repo, never by name from
+      # PyPI: the "promptops" name on PyPI belongs to an unrelated project, and
+      # this job runs with ANTHROPIC_API_KEY in its environment.
       - name: Install promptops
-        run: pip install "promptops>=0.2.0"
+        run: pip install "git+https://github.com/vineetha00/promptops@v0.2.0"
 
       # The baseline prompts and eval sets are read from the PR's base branch,
       # not from the PR checkout. Exit 2 (eval could not run, e.g. no API key

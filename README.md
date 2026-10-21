@@ -1,6 +1,6 @@
 # promptops
 
-[![PyPI version](https://img.shields.io/pypi/v/promptops.svg)](https://pypi.org/project/promptops/)
+[![Release](https://img.shields.io/github/v/release/vineetha00/promptops)](https://github.com/vineetha00/promptops/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
@@ -9,8 +9,10 @@
 **promptops** is a framework-agnostic, Git-native CLI that version-controls LLM prompts. Semantic diff. Thompson Sampling A/B routing. LLM-as-judge regression eval. MCP server. Drop-in GitHub Actions gate.
 
 ```bash
-pip install promptops
+pip install "git+https://github.com/vineetha00/promptops@v0.2.0"
 ```
+
+> **Don't `pip install promptops` from PyPI.** That name belongs to an unrelated project, which installs its own `promptops` command and Python package. This project isn't on PyPI yet; install it from a GitHub release tag as shown above.
 
 ![promptops demo — init, commit, semantic diff, Thompson Sampling A/B test, rollback](docs/demo.gif)
 
