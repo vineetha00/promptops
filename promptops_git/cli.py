@@ -19,7 +19,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(__version__, prog_name="promptops")
+@click.version_option(__version__, prog_name="promptops-git")
 def main() -> None:
     """Git-native version control for LLM prompts."""
 
@@ -170,7 +170,7 @@ def cmd_status() -> None:
     if not reg:
         console.print("[dim]no prompts tracked yet[/dim]")
         return
-    table = Table(title="promptops status")
+    table = Table(title="promptops-git status")
     table.add_column("prompt", style="cyan")
     table.add_column("active", style="green")
     table.add_column("versions", justify="right")

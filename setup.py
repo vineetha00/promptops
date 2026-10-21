@@ -5,8 +5,8 @@ here = Path(__file__).parent
 long_description = (here / "README.md").read_text() if (here / "README.md").exists() else ""
 
 setup(
-    name="promptops",
-    version="0.2.0",
+    name="promptops-git",
+    version="0.3.0",
     description="Git-native version control for LLM prompts: semantic diff, Thompson Sampling A/B, LLM-as-judge eval, MCP server.",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -28,7 +28,7 @@ setup(
         "dev": ["pytest>=7.0", "twine>=4.0", "build>=1.0"],
     },
     entry_points={
-        "console_scripts": ["promptops=promptops.cli:main"],
+        "console_scripts": ["promptops-git=promptops_git.cli:main"],
     },
     classifiers=[
         "Development Status :: 4 - Beta",

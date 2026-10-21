@@ -114,7 +114,7 @@ def save_registry(reg: dict[str, dict], start: Path | None = None) -> None:
 def _ensure_init(start: Path | None = None) -> None:
     if not is_initialized(start):
         raise RuntimeError(
-            "Not a promptops repo. Run `promptops init` first."
+            "Not a promptops repo. Run `promptops-git init` first."
         )
 
 

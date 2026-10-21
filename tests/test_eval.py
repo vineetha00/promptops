@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 from click.testing import CliRunner
 
-from promptops import cli, eval as ev, store
+from promptops_git import cli, eval as ev, store
 
 
 class FakeClient:

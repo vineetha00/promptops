@@ -9,10 +9,10 @@
 **promptops** is a framework-agnostic, Git-native CLI that version-controls LLM prompts. Semantic diff. Thompson Sampling A/B routing. LLM-as-judge regression eval. MCP server. Drop-in GitHub Actions gate.
 
 ```bash
-pip install "git+https://github.com/vineetha00/promptops@v0.2.0"
+pip install "git+https://github.com/vineetha00/promptops@v0.3.0"
 ```
 
-> **Don't `pip install promptops` from PyPI.** That name belongs to an unrelated project, which installs its own `promptops` command and Python package. This project isn't on PyPI yet; install it from a GitHub release tag as shown above.
+> **Don't `pip install promptops` from PyPI.** That name belongs to an unrelated project, which installs its own `promptops` command and Python package. This project's package is `promptops-git`, its command is `promptops-git`, and it imports as `promptops_git`. It isn't on PyPI yet, so install it from a GitHub release tag as shown above. Its data stays in your repo's `.promptops/` directory.
 
 ![promptops demo — init, commit, semantic diff, Thompson Sampling A/B test, rollback](docs/demo.gif)
 
@@ -21,12 +21,12 @@ pip install "git+https://github.com/vineetha00/promptops@v0.2.0"
 ## 60-second quickstart
 
 ```bash
-promptops init
-promptops commit payment-agent "You are a payment assistant. Be precise." --tag v1
-promptops commit payment-agent "You are a helpful payment assistant. Be precise and friendly." --tag v2
-promptops diff payment-agent v1..v2
-promptops ab-test payment-agent v1 v2 --metric quality
-promptops rollback payment-agent --to v1
+promptops-git init
+promptops-git commit payment-agent "You are a payment assistant. Be precise." --tag v1
+promptops-git commit payment-agent "You are a helpful payment assistant. Be precise and friendly." --tag v2
+promptops-git diff payment-agent v1..v2
+promptops-git ab-test payment-agent v1 v2 --metric quality
+promptops-git rollback payment-agent --to v1
 ```
 
 That's six commands from zero to versioned, A/B-tested, instantly-rollback-able prompts.
@@ -61,15 +61,15 @@ Each prompt is a plain `.txt` file under `.promptops/prompts/`. Metadata — ver
 
 | Command | What it does |
 |---|---|
-| `promptops init` | Create `.promptops/` in the current directory. |
-| `promptops commit NAME TEXT --tag v1` | Commit a new version of a prompt. |
-| `promptops log NAME` | Version history with scores, traffic, and active marker. |
-| `promptops diff NAME v1..v2` | Semantic diff: cosine similarity + sentence-level changes. |
-| `promptops ab-test NAME v1 v2 --metric quality` | Thompson Sampling routing; declares a winner at p > 0.95. |
-| `promptops rollback NAME --to v1` | Instant rollback to a prior version. |
-| `promptops status` | All tracked prompts, active versions, total traffic. |
-| `promptops eval --compare main..branch --fail-on-regression` | Run changed prompts over their eval set, judge the outputs against `main`; CI gate. |
-| `promptops serve --port 3333` | Start the MCP server (stdio). |
+| `promptops-git init` | Create `.promptops/` in the current directory. |
+| `promptops-git commit NAME TEXT --tag v1` | Commit a new version of a prompt. |
+| `promptops-git log NAME` | Version history with scores, traffic, and active marker. |
+| `promptops-git diff NAME v1..v2` | Semantic diff: cosine similarity + sentence-level changes. |
+| `promptops-git ab-test NAME v1 v2 --metric quality` | Thompson Sampling routing; declares a winner at p > 0.95. |
+| `promptops-git rollback NAME --to v1` | Instant rollback to a prior version. |
+| `promptops-git status` | All tracked prompts, active versions, total traffic. |
+| `promptops-git eval --compare main..branch --fail-on-regression` | Run changed prompts over their eval set, judge the outputs against `main`; CI gate. |
+| `promptops-git serve --port 3333` | Start the MCP server (stdio). |
 
 ---
 
@@ -79,7 +79,7 @@ Each prompt is a plain `.txt` file under `.promptops/prompts/`. Metadata — ver
 
 **Thompson Sampling A/B** — every version maintains a `Beta(α, β)` posterior over its success rate. A routing call samples once from each posterior and picks the highest. Wins bump α, losses bump β. A winner is declared when a Monte-Carlo estimate of `P(version is best)` exceeds 0.95 — i.e., statistically significant before declaring.
 
-**Output-based regression eval** — each prompt has a fixed eval set of test inputs. Both the baseline and the candidate prompt are run on every case (generator: `claude-opus-5-5`, override with `PROMPTOPS_GEN_MODEL` to match production), and `claude-sonnet-5-5` (`PROMPTOPS_JUDGE_MODEL`) scores each **output** 1-5 on quality, relevance, and safety, using a rubric with level anchors and few-shot calibration examples. Judge output is schema-constrained and validated. A version's score is the mean over the eval set. `promptops eval --prompt NAME` scores versions locally and feeds the A/B posteriors.
+**Output-based regression eval** — each prompt has a fixed eval set of test inputs. Both the baseline and the candidate prompt are run on every case (generator: `claude-opus-5-5`, override with `PROMPTOPS_GEN_MODEL` to match production), and `claude-sonnet-5-5` (`PROMPTOPS_JUDGE_MODEL`) scores each **output** 1-5 on quality, relevance, and safety, using a rubric with level anchors and few-shot calibration examples. Judge output is schema-constrained and validated. A version's score is the mean over the eval set. `promptops-git eval --prompt NAME` scores versions locally and feeds the A/B posteriors.
 
 **Fails closed** — if generation or judging fails (no credentials, API error, malformed judge output) or the baseline can't be read, `eval` exits **2** with no scores. There is no fallback scorer. Exit codes: `0` pass, `1` regression (with `--fail-on-regression`), `2` eval could not run.
 
@@ -114,7 +114,7 @@ Add this to your Claude Code MCP config:
 {
   "mcpServers": {
     "promptops": {
-      "command": "promptops",
+      "command": "promptops-git",
       "args": ["serve"]
     }
   }
@@ -130,7 +130,7 @@ Now Claude Code can `list_prompts`, fetch the active version, and read live A/B 
 Copy `.github/workflows/prompt-regression.yml` from this repo. Add `ANTHROPIC_API_KEY` to your repo secrets. Every PR touching prompts now runs:
 
 ```bash
-promptops eval --compare origin/main..HEAD --fail-on-regression
+promptops-git eval --compare origin/main..HEAD --fail-on-regression
 ```
 
 The baseline is **the active version as committed on `main`**, read with `git show`, and the eval set is also read from `main`. Nothing in the PR's checkout can change what it is measured against. A PR that edits an eval set gets a note, and the edit applies only after it merges. Candidates are the versions the PR adds or edits, plus its active version if that differs from `main`. The report lists which models actually served the run, plus token usage. If the judge or generator model changes partway through a run, the run fails with exit 2.

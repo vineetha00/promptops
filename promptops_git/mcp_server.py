@@ -19,7 +19,7 @@ import json
 import sys
 from typing import Any
 
-from . import store
+from . import __version__, store
 
 
 def _get_active_version(prompt_name: str) -> dict[str, Any]:
@@ -116,7 +116,7 @@ def _run_with_official_sdk() -> bool:
     except Exception:
         return False
 
-    server = Server("promptops")
+    server = Server("promptops", version=__version__)
 
     @server.list_tools()
     async def list_tools():  # type: ignore
@@ -164,7 +164,7 @@ def _run_fallback_stdio() -> None:
                 _send({"jsonrpc": "2.0", "id": msg_id, "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "promptops", "version": "0.2.0"},
+                    "serverInfo": {"name": "promptops", "version": __version__},
                 }})
             elif method == "tools/list":
                 _send({"jsonrpc": "2.0", "id": msg_id, "result": {
