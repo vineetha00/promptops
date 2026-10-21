@@ -35,8 +35,9 @@ class FakeClient:
             self.judge_calls.append(kw)
             response = kw["messages"][0]["content"].split("<response>")[1]
             s = self.score_fn(response)
+            q, r, sf = s if isinstance(s, tuple) else (s, s, s)
             text = self.judge_reply or json.dumps(
-                {"rationale": "r", "quality": s, "relevance": s, "safety": s})
+                {"rationale": "r", "quality": q, "relevance": r, "safety": sf})
             model = self.judge_models.pop(0) if self.judge_models else kw["model"]
         else:
             self.gen_calls.append(kw)
@@ -237,16 +238,63 @@ def _repo_with_cases(repo: Path, cases: dict) -> None:
     _pr_commit(repo)
 
 
-def test_one_noisy_case_is_not_a_regression(repo):
-    # 20% mean drop, but it all comes from one of four cases: within noise.
+def _compare(repo, client):
+    return ev.compare_branches("main", "HEAD", start=repo, evaluator=ev.Evaluator(client=client))
+
+
+def test_moderate_uneven_drop_is_noise(repo):
+    # Mean -16.7% from two cases slipping 1.67 points: not significant, no
+    # case collapses or hits the floor, and no re-judge calls are spent.
     _repo_with_cases(repo, NOISE_CASES)
-    score = lambda r: 1 if "worse" in r and "case0" in r else 5
-    report = ev.compare_branches("main", "HEAD", start=repo,
-                                 evaluator=ev.Evaluator(client=FakeClient(score_fn=score)))
-    assert report.stats["payment-agent@v2"]["drop"] == pytest.approx(0.2)
+    score = lambda r: (3, 3, 4) if "worse" in r and ("case0" in r or "case1" in r) else 5
+    client = FakeClient(score_fn=score)
+    report = _compare(repo, client)
+    assert report.stats["payment-agent@v2"]["drop"] == pytest.approx(1 / 6)
     assert report.regressions == []
     assert any("within judge noise" in n for n in report.notes)
     assert any("only 4 eval cases" in n for n in report.notes)
+    assert len(client.judge_calls) == 8
+
+
+def test_single_collapsed_case_is_a_regression(repo):
+    # The shape the live run found: the mean test misses it (one of four
+    # cases), the collapse rule catches it and the re-judge confirms it.
+    _repo_with_cases(repo, NOISE_CASES)
+    report = _compare(repo, FakeClient(score_fn=lambda r: 1 if "worse" in r and "case0" in r else 5))
+    assert report.stats["payment-agent@v2"]["p"] > ev.SIGNIFICANCE
+    [t] = report.triggers["payment-agent@v2"]
+    assert (t["rule"], t["case"], t["confirmed"]) == ("collapse", "c0", [5.0, 1.0])
+
+
+def test_collapse_not_confirmed_by_rejudge_is_not_flagged(repo):
+    _repo_with_cases(repo, NOISE_CASES)
+    seen = []
+
+    def flaky(r):  # the first judgement of the candidate's c0 is a fluke
+        if "worse" in r and "case0" in r:
+            seen.append(r)
+            return 1 if len(seen) == 1 else 5
+        return 5
+
+    report = _compare(repo, FakeClient(score_fn=flaky))
+    assert report.regressions == []
+    assert any("re-judge did not confirm" in n for n in report.notes)
+
+
+def test_case_below_floor_is_a_regression(repo):
+    # Mediocre got slightly worse: a 0.67 drop, under every drop-based rule.
+    _repo_with_cases(repo, NOISE_CASES)
+    score = lambda r: ((1, 2, 2) if "worse" in r else (2, 2, 3)) if "case0" in r else 5
+    report = _compare(repo, FakeClient(score_fn=score))
+    [t] = report.triggers["payment-agent@v2"]
+    assert t["rule"] == "floor" and t["candidate"] == pytest.approx(5 / 3)
+
+
+def test_floor_failure_already_on_baseline_is_only_noted(repo):
+    _repo_with_cases(repo, NOISE_CASES)
+    report = _compare(repo, FakeClient(score_fn=lambda r: 1 if "case0" in r else 5))
+    assert report.regressions == []
+    assert any("the baseline is too" in n for n in report.notes)
 
 
 def test_consistent_drop_is_a_regression(repo):
@@ -272,7 +320,9 @@ def test_report_records_served_models_and_usage(repo):
     report = ev.compare_branches("main", "HEAD", start=repo,
                                  evaluator=ev.Evaluator(client=FakeClient()))
     assert report.models == {"generator": [ev.GEN_MODEL], "judge": [ev.JUDGE_MODEL]}
-    assert report.usage["calls"] == 8  # 2 versions x 2 cases x (generate + judge)
+    # 2 versions x 2 cases x (generate + judge), plus a confirming re-judge of
+    # both sides for each of the 2 collapsed cases
+    assert report.usage["calls"] == 12
 
 
 # --- defect 3: judge outputs over a fixed eval set ---------------------------

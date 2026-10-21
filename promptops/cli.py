@@ -250,17 +250,28 @@ def cmd_eval(compare_spec: str | None, prompt_name: str | None,
     if report.regressions:
         console.print("[red]regressions detected:[/red]")
         for a, b, drop in report.regressions:
-            p = report.stats.get(b, {}).get("p")
-            p_str = f" (p={p:.3f})" if p is not None else ""
-            console.print(f"  {a} → {b}: -{drop*100:.1f}%{p_str}")
-            base_cases, cand_cases = report.cases.get(a, {}), report.cases.get(b, {})
-            deltas = {c: cand_cases[c].total - base_cases[c].total
-                      for c in cand_cases if c in base_cases}
-            for cid in sorted(deltas, key=deltas.get)[:3]:  # worst three cases
+            console.print(f"  {a} → {b}: mean -{drop*100:.1f}%")
+            for t in report.triggers.get(b, []):
+                if t["rule"] == "mean":
+                    console.print(f"    [red]mean[/red]: -{t['drop']*100:.1f}%, p={t['p']:.3f}")
+                    base_cases, cand_cases = report.cases.get(a, {}), report.cases.get(b, {})
+                    deltas = {c: cand_cases[c].total - base_cases[c].total
+                              for c in cand_cases if c in base_cases}
+                    for cid in sorted(deltas, key=deltas.get)[:3]:  # worst three cases
+                        console.print(f"      case {cid}: {base_cases[cid].total:.2f} → "
+                                      f"{cand_cases[cid].total:.2f}")
+                    continue
+                cb, cc = t["confirmed"]
+                confirm = (f"{cb:.2f} → {cc:.2f}" if cb is not None else f"{cc:.2f}")
+                rule = (f"dropped {t['baseline'] - t['candidate']:.2f} points"
+                        if t["rule"] == "collapse"
+                        else f"below the floor of {eval_mod.FLOOR}")
                 console.print(
-                    f"    case {cid}: {base_cases[cid].total:.2f} → "
-                    f"{cand_cases[cid].total:.2f}  [dim]{escape(cand_cases[cid].rationale)}[/dim]"
+                    f"    [red]{t['rule']}[/red]: case {t['case']} "
+                    f"{t['baseline']:.2f} → {t['candidate']:.2f}, {rule} "
+                    f"(re-judged: {confirm})"
                 )
+                console.print(f"      [dim]{escape(t['rationale'])}[/dim]")
         if fail_on_regression:
             sys.exit(1)
     else:

@@ -40,11 +40,20 @@ JUDGE_MODEL = "claude-sonnet-5-5"
 
 REFUSAL_OUTPUT = "[the model declined to respond]"
 
-# A drop only counts as a regression if it is both large (the caller's
-# threshold) and unlikely to be judge noise: a one-sided paired t-test over the
-# per-case score differences must reject "no drop" at this level.
+# A candidate regresses if any of three triggers fires. Prompt regressions are
+# usually sparse and severe (a few inputs break completely), not uniform and
+# mild, and a mean-based test is blind to that shape, hence the per-case rules.
+#
+# 1. mean: the mean score drops more than the caller's threshold AND a one-sided
+#    paired t-test over per-case differences rejects "no drop" at SIGNIFICANCE.
 SIGNIFICANCE = 0.05
-# Below this many cases the noise test has little power; the report says so.
+# 2. collapse: one case drops by at least COLLAPSE_DROP points (1-5 scale).
+# 3. floor: one case scores below FLOOR while the baseline scored at or above it.
+# Both per-case triggers are confirmed by judging the same outputs again, so a
+# single flaky judgement cannot fail the gate.
+COLLAPSE_DROP = 2.0
+FLOOR = 2.0
+# Below this many cases the mean test has little power; the report says so.
 MIN_RECOMMENDED_CASES = 10
 
 JUDGE_SYSTEM = """You are an impartial evaluator in a regression test for an LLM application.
@@ -187,6 +196,8 @@ class EvalReport:
     regressions: list[tuple[str, str, float]] = field(default_factory=list)
     # per-candidate comparison: {"name@tag": {"drop": fraction, "p": p-value}}
     stats: dict[str, dict[str, float]] = field(default_factory=dict)
+    # rules that fired per regressed candidate: {"name@tag": [{"rule": ...}, ...]}
+    triggers: dict[str, list[dict]] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     # models that actually served the calls, as reported by the API
     models: dict[str, list[str]] = field(default_factory=dict)
@@ -204,6 +215,7 @@ class EvalReport:
                 for key, per_case in self.cases.items()
             },
             "stats": self.stats,
+            "triggers": self.triggers,
             "notes": self.notes,
             "models": self.models,
             "usage": self.usage,
@@ -395,6 +407,47 @@ def _drop_p_value(base: dict[str, Score], cand: dict[str, Score]) -> float:
     return float(t_dist.cdf(mean / (sd / math.sqrt(n)), df=n - 1))
 
 
+def _case_triggers(evaluator: Evaluator, key: str, cases: list[Case],
+                   base: dict[str, Score], cand: dict[str, Score],
+                   notes: list[str]) -> list[dict]:
+    """Apply the collapse and floor rules, confirming each by a re-judge."""
+    fired = []
+    for c in cases:
+        b, k = base[c.id], cand[c.id]
+        rejudged = None
+        if b.total - k.total >= COLLAPSE_DROP:
+            b2, rejudged = evaluator.judge(c, b.output), evaluator.judge(c, k.output)
+            if b2.total - rejudged.total >= COLLAPSE_DROP:
+                fired.append({"rule": "collapse", "case": c.id,
+                              "baseline": b.total, "candidate": k.total,
+                              "confirmed": [b2.total, rejudged.total],
+                              "rationale": rejudged.rationale})
+                continue
+            notes.append(
+                f"{key}: case {c.id} dropped {b.total:.2f} → {k.total:.2f}, but the "
+                f"re-judge did not confirm it ({b2.total:.2f} → {rejudged.total:.2f})"
+            )
+        if k.total < FLOOR:
+            if b.total < FLOOR:
+                notes.append(
+                    f"{key}: case {c.id} scores {k.total:.2f}, below the floor of "
+                    f"{FLOOR}, but the baseline is too ({b.total:.2f}); not caused by this change"
+                )
+                continue
+            rejudged = rejudged or evaluator.judge(c, k.output)
+            if rejudged.total < FLOOR:
+                fired.append({"rule": "floor", "case": c.id,
+                              "baseline": b.total, "candidate": k.total,
+                              "confirmed": [None, rejudged.total],
+                              "rationale": rejudged.rationale})
+            else:
+                notes.append(
+                    f"{key}: case {c.id} scored {k.total:.2f}, below the floor, but the "
+                    f"re-judge gave {rejudged.total:.2f}"
+                )
+    return fired
+
+
 def _finish(report: EvalReport, evaluator: Evaluator) -> EvalReport:
     """Attach served models and usage; refuse a run that mixed models."""
     report.usage = dict(evaluator.usage)
@@ -509,9 +562,10 @@ def compare_branches(base_ref: str = "main", head_ref: str = "HEAD",
     as committed on base_ref, and the eval set is the one committed on
     base_ref. Candidates are the versions head_ref adds or edits, plus head's
     active version if it differs from the baseline. A candidate is a
-    regression when its mean score drops more than `regression_threshold`
-    (fraction) AND the paired per-case drop is significant at SIGNIFICANCE,
-    so a near-tie or a single noisy judgement does not fail the gate.
+    regression when any trigger fires (see SIGNIFICANCE, COLLAPSE_DROP and
+    FLOOR above): a significant mean drop over `regression_threshold`
+    (fraction), or one case that collapses or lands below the floor,
+    confirmed by a second judgement.
     """
     root = store._root(start)
     base, head = _GitRef(root, base_ref), _GitRef(root, head_ref)
@@ -593,11 +647,16 @@ def compare_branches(base_ref: str = "main", head_ref: str = "HEAD",
             drop = (base_score.total - score.total) / base_score.total
             p = _drop_p_value(base_cases, per_case)
             report.stats[key] = {"drop": drop, "p": p}
+            fired = []
             if drop > regression_threshold and p < SIGNIFICANCE:
-                report.regressions.append((base_key, key, drop))
+                fired.append({"rule": "mean", "drop": drop, "p": p})
             elif drop > regression_threshold:
                 report.notes.append(
-                    f"{key}: -{drop * 100:.1f}% but not flagged; the per-case drop is "
-                    f"within judge noise (p={p:.2f}, n={len(per_case)})"
+                    f"{key}: mean -{drop * 100:.1f}% is within judge noise "
+                    f"(p={p:.2f}, n={len(per_case)}); the per-case rules still apply"
                 )
+            fired += _case_triggers(evaluator, key, cases, base_cases, per_case, report.notes)
+            if fired:
+                report.triggers[key] = fired
+                report.regressions.append((base_key, key, drop))
     return _finish(report, evaluator)

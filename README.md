@@ -131,7 +131,21 @@ Copy `.github/workflows/prompt-regression.yml` from this repo. Add `ANTHROPIC_AP
 promptops eval --compare origin/main..HEAD --fail-on-regression
 ```
 
-The baseline is **the active version as committed on `main`**, read with `git show`, and the eval set is also read from `main`. Nothing in the PR's checkout can change what it is measured against. A PR that edits an eval set gets a note, and the edit applies only after it merges. Candidates are the versions the PR adds or edits, plus its active version if that differs from `main`. A candidate blocks the merge only if two things are both true. Its mean score must drop more than 10% (`--threshold`). The drop must also pass a noise test: a one-sided paired t-test across the eval cases, at p < 0.05. A large mean drop driven by one noisy case is printed as a note and does not fail the check. The report also lists which models actually served the run, plus token usage. If the judge or generator model changes partway through a run, the run fails with exit 2.
+The baseline is **the active version as committed on `main`**, read with `git show`, and the eval set is also read from `main`. Nothing in the PR's checkout can change what it is measured against. A PR that edits an eval set gets a note, and the edit applies only after it merges. Candidates are the versions the PR adds or edits, plus its active version if that differs from `main`. The report lists which models actually served the run, plus token usage. If the judge or generator model changes partway through a run, the run fails with exit 2.
+
+### When does a change count as a regression?
+
+**Prompt regressions are sparse and severe, not uniform and mild.** A bad prompt edit rarely makes every answer slightly worse. More often it breaks a few inputs completely and leaves the rest alone. In testing, a prompt that told the assistant to ask for card details made it refuse 2 of 6 ordinary requests. Those cases fell from about 4.7 to 1.0, while the other four cases were unaffected. A mean-based test can't see that shape, because the uneven drops look like noise to it. That run had a -19% mean drop at p = 0.08, and the mean rule alone passed it. So the gate has three triggers, and any one of them blocks the merge:
+
+| Trigger | Fires when | Catches |
+|---|---|---|
+| **mean** | mean score drops more than 10% (`--threshold`) *and* a one-sided paired t-test across cases gives p < 0.05 | broad, uniform degradation |
+| **collapse** | one case drops by ≥ 2.0 points (1–5 scale) | a prompt that breaks specific inputs |
+| **floor** | one case scores below 2.0, when the baseline did not | mediocre answers that got a little worse and are now broken |
+
+Before collapse or floor fires, the same outputs are judged a second time. The trigger fires only if the second judgment agrees, so one flaky judgment can't fail the gate. That costs nothing unless a trigger is about to fire. A case that is already below the floor on `main` gets a note but doesn't block the PR, since the PR didn't cause it. The report says which rule fired and the size of the drop, so you can see what kind of failure you have.
+
+**Note for large eval sets:** the per-case rules check every case, so each extra case is another chance for a spurious trigger. A 50-case eval set will trigger falsely more often than a 6-case one. The confirmation re-judge reduces this but doesn't remove it. Larger sets are more sensitive, so expect them to fail the gate more often.
 
 Add an eval set for each prompt at `.promptops/evals/<prompt-name>.json` and merge it to `main` before you gate changes to that prompt. A changed prompt with no eval set on `main` fails the check:
 
@@ -146,7 +160,7 @@ Add an eval set for each prompt at `.promptops/evals/<prompt-name>.json` and mer
 }
 ```
 
-Use real traffic for the inputs, and aim for at least 10–20 cases. With a handful of cases, a single noisy judgement can move the mean past the threshold. Each case costs one generation and one judge call per version.
+Use real traffic for the inputs, and aim for at least 10–20 cases. Below 10, the mean test has little power and the report warns you. Each case costs one generation and one judge call per version. Measured with the default models, that's about $0.005–0.009 per case per version, so a 20-case eval set costs roughly **$0.20–0.35 per PR**.
 
 PRs from forks don't get repository secrets. On a fork PR the check fails with exit 2 instead of passing silently, and the message tells the contributor this is expected and that a maintainer needs to run the check. To make the gate hard to bypass, mark it as a required status check and protect `.github/workflows/` with CODEOWNERS. A PR can edit its own workflow file.
 
