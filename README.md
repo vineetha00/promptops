@@ -1,6 +1,6 @@
 # promptops
 
-[![Release](https://img.shields.io/github/v/release/vineetha00/promptops)](https://github.com/vineetha00/promptops/releases)
+[![PyPI](https://img.shields.io/pypi/v/promptops-git.svg)](https://pypi.org/project/promptops-git/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
@@ -9,10 +9,10 @@
 **promptops** is a framework-agnostic, Git-native CLI that version-controls LLM prompts. Semantic diff. Thompson Sampling A/B routing. LLM-as-judge regression eval. MCP server. Drop-in GitHub Actions gate.
 
 ```bash
-pip install "git+https://github.com/vineetha00/promptops@v0.3.0"
+pip install promptops-git
 ```
 
-> **Don't `pip install promptops` from PyPI.** That name belongs to an unrelated project, which installs its own `promptops` command and Python package. This project's package is `promptops-git`, its command is `promptops-git`, and it imports as `promptops_git`. It isn't on PyPI yet, so install it from a GitHub release tag as shown above. Its data stays in your repo's `.promptops/` directory.
+> **Install `promptops-git`, not `promptops`.** The `promptops` package on PyPI is an unrelated project, which installs its own `promptops` command and Python package. This project's command is `promptops-git`, it imports as `promptops_git`, and its data stays in your repo's `.promptops/` directory.
 
 ![promptops demo — init, commit, semantic diff, Thompson Sampling A/B test, rollback](docs/demo.gif)
 
